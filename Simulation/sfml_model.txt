@@ -1,0 +1,261 @@
+// // -*- coding: utf-8 -*-
+// #include <cstdlib>
+// #include <ctime>
+// #include <iostream>
+// #include <stdexcept>
+// #include <string>
+// #include <vector>
+// #include <sstream>
+// #include <ostream>
+// #include <array>
+// using namespace std;
+// #include "coord.hpp"
+// #include "grille.hpp"
+// #include "termite.hpp"
+// using colonnie=vector<Termite>;
+// int main(){
+// 	srand(time(NULL));
+// 	cout << "OK";
+// 	Grille g;
+// 	g.initialiseNid(Coord{10,0},1);
+// 	g.initialiseNid(Coord{10,19},2);
+// 	g.placeBrindille();
+// 	colonnie c1=colonnieDeTermitesNid(g,1);
+// 	colonnie c2=colonnieDeTermitesNid(g,2);
+// 	colonnie c3=colonnieDeTermitesNid(g,1);
+// 	cout<<"Simulation nid DEBUT"<<endl;
+// 	cout<<g;
+	
+// 	for(int i=0;i<200;i++){
+// 		//cout<<"+++++++++++++++++++++"<<i<<endl;
+// 		// Passage par reference pour modifier les termites dans le vecteur.On aurait pu iterer sur les indices
+// 		//cout<<i<<endl;
+// 		//cout<<g;
+		
+// 		for(auto &t:c1){
+// 		 	t.vieTermiteNid(g,i,Coord{10,0});
+// 			//t.vieTermiteNid(g,i,Coord{10,0});
+// 			//t.vieTermiteNid(g,i,Coord{10,0});
+// 		 }
+// 		for(auto &t:c2){
+// 		 	t.vieTermiteNid(g,i,Coord{10,19});
+// 		 }
+// 		for(auto &t:c3){
+// 		 	t.vieTermiteNid(g,i,Coord{10,0});
+// 		 }
+// 		if(i%100==0){
+// 			cout<<"Simulation nid "<<i<<endl;
+// 		 	cout<<g;
+// 		}
+// 	 }
+// 	cout<<g;
+// 	return 0;
+// }
+// -*- coding: utf-8 -*-
+#include <cstdlib>
+#include <ctime>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <ostream>
+#include <array>
+#include <SFML/Graphics.hpp>
+using namespace std;
+#include "coord.hpp"
+#include "grille.hpp"
+#include "termite.hpp"
+
+using colonnie = vector<Termite>;
+
+// Constantes d'affichage
+const int CELL_SIZE = 30;          // pixels par case
+const int GRID_SIZE = tailleGrille; // 20
+const int WINDOW_SIZE = GRID_SIZE * CELL_SIZE;
+const int SIMULATION_DELAY = 50;   // ms par étape
+
+// Positions des deux nids (connues du main)
+const Coord NID1_POS(10, 0);
+const Coord NID2_POS(10, 19);
+
+// Dessine la grille en utilisant caseContient() et les positions fixes des nids
+void drawGrille(sf::RenderWindow& window, const Grille& g) {
+    for (int x = 0; x < GRID_SIZE; ++x) {
+        for (int y = 0; y < GRID_SIZE; ++y) {
+            sf::RectangleShape cell(sf::Vector2f(CELL_SIZE - 1, CELL_SIZE - 1));
+            cell.setPosition(x * CELL_SIZE, y * CELL_SIZE);
+            Coord pos(x, y);
+            int contenu = g.caseContient(pos);
+            
+            // Vérifier si c'est un nid (comparaison avec les positions connues)
+            if (pos.getLig() == NID1_POS.getLig() && pos.getCol() == NID1_POS.getCol()) {
+                cell.setFillColor(sf::Color(255, 215, 0)); // Or pour nid 1
+            }
+            else if (pos.getLig() == NID2_POS.getLig() && pos.getCol() == NID2_POS.getCol()) {
+                cell.setFillColor(sf::Color(192, 192, 192)); // Argent pour nid 2
+            }
+            else if (contenu == -1) { // Brindille
+                cell.setFillColor(sf::Color(160, 82, 45)); // Marron
+            }
+            else {
+                cell.setFillColor(sf::Color(34, 139, 34)); // Vert pour herbe / vide
+            }
+            window.draw(cell);
+        }
+    }
+}
+
+// Dessine les termites en utilisant getPos() et getNid()
+void drawTermites(sf::RenderWindow& window, const colonnie& c1, const colonnie& c2, const colonnie& c3) {
+    sf::CircleShape termite(CELL_SIZE / 3);
+    
+    // Termites du nid 1 (rouge)
+    termite.setFillColor(sf::Color::Red);
+    for (const auto& t : c1) {
+        Coord pos = t.getPos();
+        termite.setPosition(pos.getLig() * CELL_SIZE + CELL_SIZE/3,
+                            pos.getCol() * CELL_SIZE + CELL_SIZE/3);
+        window.draw(termite);
+    }
+    
+    // Termites du nid 2 (bleu)
+    termite.setFillColor(sf::Color::Blue);
+    for (const auto& t : c2) {
+        Coord pos = t.getPos();
+        termite.setPosition(pos.getLig() * CELL_SIZE + CELL_SIZE/3,
+                            pos.getCol() * CELL_SIZE + CELL_SIZE/3);
+        window.draw(termite);
+    }
+    
+    // Termites du groupe c3 (nid 1 aussi, mais en orange pour les distinguer)
+    termite.setFillColor(sf::Color(255, 165, 0)); // Orange
+    for (const auto& t : c3) {
+        Coord pos = t.getPos();
+        termite.setPosition(pos.getLig() * CELL_SIZE + CELL_SIZE/3,
+                            pos.getCol() * CELL_SIZE + CELL_SIZE/3);
+        window.draw(termite);
+    }
+}
+
+// Affiche les statistiques et l'aide
+void drawStats(sf::RenderWindow& window, int step, const colonnie& c1, const colonnie& c2, const colonnie& c3, bool isPaused) {
+    sf::Font font;
+    // Police système (à adapter selon votre OS)
+    if (!font.loadFromFile("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf") &&
+        !font.loadFromFile("C:/Windows/Fonts/Arial.ttf")) {
+        return; // Pas de police, on n'affiche pas le texte
+    }
+    
+    sf::Text text;
+    text.setFont(font);
+    text.setCharacterSize(16);
+    text.setFillColor(sf::Color::White);
+    
+    stringstream ss;
+    ss << "Step: " << step << "/200\n"
+       << "Nid 1 termites: " << (c1.size() + c3.size()) << "\n"
+       << "Nid 2 termites: " << c2.size() << "\n";
+    if (isPaused)
+        ss << "\nPAUSE - Appuyez sur ESPACE";
+    else
+        ss << "\nESPACE: Pause   R: Reset   ESC: Quitter";
+    
+    text.setString(ss.str());
+    text.setPosition(10, 10);
+    
+    sf::RectangleShape bg(sf::Vector2f(220, 110));
+    bg.setFillColor(sf::Color(0, 0, 0, 180));
+    bg.setPosition(5, 5);
+    window.draw(bg);
+    window.draw(text);
+}
+
+int main() {
+    srand(time(NULL));
+    
+    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE, WINDOW_SIZE), "Simulation de Termites");
+    window.setFramerateLimit(60);
+    
+    cout << "OK" << endl;
+    cout << "Simulation SFML - Utilisation des methodes existantes" << endl;
+    
+    // Initialisation de la grille et des termites (identique au code original)
+    Grille g;
+    g.initialiseNid(NID1_POS, 1);
+    g.initialiseNid(NID2_POS, 2);
+    g.placeBrindille();
+    
+    colonnie c1 = colonnieDeTermitesNid(g, 1);
+    colonnie c2 = colonnieDeTermitesNid(g, 2);
+    colonnie c3 = colonnieDeTermitesNid(g, 1);
+    
+    cout << "Simulation nid DEBUT" << endl;
+    cout << g;
+    
+    int step = 0;
+    bool isPaused = false;
+    bool isRunning = true;
+    sf::Clock clock;
+    
+    while (window.isOpen() && isRunning && step < 200) {
+        // Gestion des événements (version SFML 2.x)
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed)
+                window.close();
+            else if (event.type == sf::Event::KeyPressed) {
+                if (event.key.code == sf::Keyboard::Space)
+                    isPaused = !isPaused;
+                else if (event.key.code == sf::Keyboard::Escape)
+                    window.close();
+                else if (event.key.code == sf::Keyboard::R) {
+                    // Réinitialisation complète
+                    step = 0;
+                    g = Grille();
+                    g.initialiseNid(NID1_POS, 1);
+                    g.initialiseNid(NID2_POS, 2);
+                    g.placeBrindille();
+                    c1 = colonnieDeTermitesNid(g, 1);
+                    c2 = colonnieDeTermitesNid(g, 2);
+                    c3 = colonnieDeTermitesNid(g, 1);
+                    cout << "Simulation reinitialisee." << endl;
+                }
+            }
+        }
+        
+        // Mise à jour de la simulation
+        if (!isPaused && clock.getElapsedTime().asMilliseconds() >= SIMULATION_DELAY) {
+            // Appels exactement comme dans le code original
+            for (auto& t : c1)
+                t.vieTermiteNid(g, step, NID1_POS);
+            for (auto& t : c2)
+                t.vieTermiteNid(g, step, NID2_POS);
+            for (auto& t : c3)
+                t.vieTermiteNid(g, step, NID1_POS);
+            
+            ++step;
+            clock.restart();
+            
+            if (step % 100 == 0 || step == 199) {
+                cout << "Simulation nid " << step << endl;
+                cout << g;
+            }
+        }
+        
+        // Rendu graphique
+        window.clear(sf::Color::Black);
+        drawGrille(window, g);
+        drawTermites(window, c1, c2, c3);
+        drawStats(window, step, c1, c2, c3, isPaused);
+        window.display();
+    }
+    
+    cout << "Simulation terminee!" << endl;
+    cout << g;
+    
+    if (step >= 200)
+        sf::sleep(sf::seconds(3));
+    
+    return 0;
+}
